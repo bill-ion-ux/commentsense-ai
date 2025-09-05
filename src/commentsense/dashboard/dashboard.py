@@ -1,11 +1,11 @@
 import streamlit as st
 import pandas as pd
+import os
+
+ASSETS_DIR = os.path.join(os.path.dirname(__file__), "..", "assets")
+df = pd.read_csv(os.path.join(ASSETS_DIR, "comments2_analyzed.csv"))
 
 st.set_page_config(page_title="CommentSense Dashboard", layout="wide")
-
-# Load analyzed data
-df = pd.read_csv("comments2_analyzed.csv")
-
 st.title("CommentSense – AI-Powered Comment Analysis")
 
 # KPIs
@@ -31,7 +31,7 @@ st.bar_chart(df["category"].value_counts())
 
 # Per-video summary
 st.subheader("Per Video Quality Metrics")
-per_video = pd.read_csv("per_video_summary.csv")
+per_video = pd.read_csv(os.path.join(ASSETS_DIR, "per_video_summary.csv"))
 st.dataframe(per_video.sort_values("quality_ratio", ascending=False))
 
 # Top quality comments

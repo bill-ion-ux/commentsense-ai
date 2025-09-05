@@ -3,6 +3,17 @@ import re
 from transformers import pipeline
 import torch
 import math
+import os
+
+# ----------------------------
+# 0. Paths
+# ----------------------------
+ASSETS_DIR = "./src/commentsense/assets"
+os.makedirs(ASSETS_DIR, exist_ok=True)  # Ensure folder exists
+
+input_file = os.path.join(ASSETS_DIR, "comments2.csv")
+output_file = os.path.join(ASSETS_DIR, "comments2_analyzed.csv")
+summary_file = os.path.join(ASSETS_DIR, "per_video_summary.csv")
 
 # ----------------------------
 # 1. GPU Check
@@ -14,8 +25,7 @@ if torch.cuda.is_available():
 # ----------------------------
 # 2. LOAD DATA
 # ----------------------------
-file_path = "comments2.csv"  # Change path if needed
-df = pd.read_csv(file_path, encoding='utf-8', on_bad_lines='skip')
+df = pd.read_csv(input_file, encoding='utf-8', on_bad_lines='skip')
 print(f"Loaded {len(df)} records")
 print("Columns:", df.columns)
 
@@ -38,7 +48,7 @@ print("Loading sentiment model...")
 sentiment_pipeline = pipeline("sentiment-analysis", device=0 if torch.cuda.is_available() else -1)
 
 BATCH_SIZE = 5000
-MAX_BATCHES = 2  # Limit to two batches (10,000 rows max)
+MAX_BATCHES = 2
 sentiments = []
 
 total_batches = math.ceil(len(df) / BATCH_SIZE)
@@ -52,7 +62,6 @@ for batch_num, i in enumerate(range(0, len(df), BATCH_SIZE)):
     results = sentiment_pipeline(batch_texts, batch_size=32, truncation=True)
     sentiments.extend([r["label"] for r in results])
 
-# Fill unprocessed rows with placeholder
 if len(sentiments) < len(df):
     sentiments.extend(["not_processed"] * (len(df) - len(sentiments)))
 
@@ -89,6 +98,7 @@ CATEGORY_MAP = {
     "Fragrance": ["fragrance","perfume","eau de parfum","edp","eau de toilette","edt","cologne","scent"],
     "Makeup": ["makeup","foundation","concealer","mascara","lipstick","blush","eyeliner","palette","brow"]
 }
+
 def categorize(t):
     t = (t or "").lower()
     for cat, kws in CATEGORY_MAP.items():
@@ -121,6 +131,7 @@ def engagement_score(row):
     return min(1.0, math.log1p(lc)/math.log1p(50))
 
 W_REL, W_SNT, W_LEN, W_ENG = 0.40, 0.35, 0.15, 0.10
+
 def quality_row(row):
     if row["spam_flag"] == "spam":
         return 0.0
@@ -136,8 +147,8 @@ df["is_quality"] = df["quality_score"] >= 0.65
 # ----------------------------
 # 8. SAVE RESULTS
 # ----------------------------
-df.to_csv("comments2_analyzed.csv", index=False, encoding="utf-8")
-print("Saved comments2_analyzed.csv")
+df.to_csv(output_file, index=False, encoding="utf-8")
+print("Saved", output_file)
 
 per_video = df.groupby("videoId").agg(
     quality_ratio=("is_quality","mean"),
@@ -145,8 +156,8 @@ per_video = df.groupby("videoId").agg(
     comments=("commentId","count")
 ).reset_index()
 per_video["quality_ratio"] = (per_video["quality_ratio"]*100).round(1)
-per_video.to_csv("per_video_summary.csv", index=False, encoding="utf-8")
-print("Saved per_video_summary.csv")
+per_video.to_csv(summary_file, index=False, encoding="utf-8")
+print("Saved", summary_file)
 
 print("Analysis complete!")
 print("Quality Ratio Overall:", f"{df['is_quality'].mean()*100:.2f}%")
