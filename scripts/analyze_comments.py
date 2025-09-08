@@ -4,16 +4,24 @@ from transformers import pipeline
 import torch
 import math
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ----------------------------
 # 0. Paths
 # ----------------------------
-ASSETS_DIR = "./src/commentsense/assets"
-os.makedirs(ASSETS_DIR, exist_ok=True)  # Ensure folder exists
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # parent of script
+
+ASSETS_DIR = os.path.join(PROJECT_ROOT, "src", "commentsense", "assets")
+os.makedirs(ASSETS_DIR, exist_ok=True)
 
 input_file = os.path.join(ASSETS_DIR, "comments2.csv")
 output_file = os.path.join(ASSETS_DIR, "comments2_analyzed.csv")
 summary_file = os.path.join(ASSETS_DIR, "per_video_summary.csv")
+
+print("Looking for:", input_file)
+
+
+print("Current working directory:", os.getcwd())
 
 # ----------------------------
 # 1. GPU Check
@@ -47,21 +55,36 @@ df["cleaned_comment"] = df["textOriginal"].apply(clean_text)
 print("Loading sentiment model...")
 sentiment_pipeline = pipeline("sentiment-analysis", device=0 if torch.cuda.is_available() else -1)
 
+def analyze_batch(batch_id, batch_texts):
+    print(f"[Batch {batch_id}] Starting ({len(batch_texts)} comments)...")
+    results = sentiment_pipeline(batch_texts, batch_size=128, truncation=True)
+    print(f"[Batch {batch_id}] Done")
+    return batch_id, [r["label"] for r in results]
+
 BATCH_SIZE = 5000
-MAX_BATCHES = 2
+MAX_BATCHES = 200
+texts = df["cleaned_comment"].tolist()
+futures = []
+
+with ThreadPoolExecutor(max_workers=2) as executor:  # 2 workers safer for GPU
+    for batch_num, i in enumerate(range(0, len(texts), BATCH_SIZE)):
+        if batch_num >= MAX_BATCHES:
+            break
+        batch_texts = texts[i:i+BATCH_SIZE]
+        futures.append(executor.submit(analyze_batch, batch_num, batch_texts))
+
+# Collect results in correct order
+batch_results = {}
+for f in as_completed(futures):
+    batch_id, labels = f.result()
+    batch_results[batch_id] = labels
+
+# Rebuild sentiment list in batch order
 sentiments = []
+for batch_num in range(len(batch_results)):
+    sentiments.extend(batch_results[batch_num])
 
-total_batches = math.ceil(len(df) / BATCH_SIZE)
-print(f"Processing only {MAX_BATCHES} out of {total_batches} batches...")
-
-for batch_num, i in enumerate(range(0, len(df), BATCH_SIZE)):
-    if batch_num >= MAX_BATCHES:
-        break
-    batch_texts = df["cleaned_comment"].iloc[i:i+BATCH_SIZE].tolist()
-    print(f"Processing batch {batch_num + 1}/{MAX_BATCHES} ...")
-    results = sentiment_pipeline(batch_texts, batch_size=32, truncation=True)
-    sentiments.extend([r["label"] for r in results])
-
+# Pad if incomplete
 if len(sentiments) < len(df):
     sentiments.extend(["not_processed"] * (len(df) - len(sentiments)))
 
