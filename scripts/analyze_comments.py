@@ -8,12 +8,19 @@ import os
 # ----------------------------
 # 0. Paths
 # ----------------------------
-ASSETS_DIR = "./src/commentsense/assets"
-os.makedirs(ASSETS_DIR, exist_ok=True)  # Ensure folder exists
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # parent of script
+
+ASSETS_DIR = os.path.join(PROJECT_ROOT, "src", "commentsense", "assets")
+os.makedirs(ASSETS_DIR, exist_ok=True)
 
 input_file = os.path.join(ASSETS_DIR, "comments2.csv")
 output_file = os.path.join(ASSETS_DIR, "comments2_analyzed.csv")
 summary_file = os.path.join(ASSETS_DIR, "per_video_summary.csv")
+
+print("Looking for:", input_file)
+
+
+print("Current working directory:", os.getcwd())
 
 # ----------------------------
 # 1. GPU Check
@@ -48,7 +55,7 @@ print("Loading sentiment model...")
 sentiment_pipeline = pipeline("sentiment-analysis", device=0 if torch.cuda.is_available() else -1)
 
 BATCH_SIZE = 5000
-MAX_BATCHES = 2
+MAX_BATCHES = 200
 sentiments = []
 
 total_batches = math.ceil(len(df) / BATCH_SIZE)

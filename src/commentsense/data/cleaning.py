@@ -6,7 +6,8 @@ import emoji
 #|       LOAD THE CSV FILE          |
 #-----------------------------------
 
-df = pd.read_csv("comments5.csv", encoding="utf-8", on_bad_lines="skip")
+# df = pd.read_csv("comments5.csv", encoding="utf-8", on_bad_lines="skip")
+df = pd.read_csv("/src/commentsense/assets/comments5.csv", encoding="utf-8", on_bad_lines="skip")
 
 print(df.head())
 #print(df.info())
