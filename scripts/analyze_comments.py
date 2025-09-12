@@ -62,7 +62,7 @@ def analyze_batch(batch_id, batch_texts):
     return batch_id, [r["label"] for r in results]
 
 BATCH_SIZE = 5000
-MAX_BATCHES = 200
+MAX_BATCHES = 2
 texts = df["cleaned_comment"].tolist()
 futures = []
 
@@ -93,13 +93,30 @@ df["sentiment"] = sentiments
 # ----------------------------
 # 5. SPAM DETECTION
 # ----------------------------
-def detect_spam(text):
-    text = text.lower()
-    if "http" in text or "subscribe" in text or "follow me" in text:
-        return "spam"
-    return "not_spam"
+print("Loading spam detection model...")
+spam_detector = pipeline(
+    "text-classification",
+    model="valurank/distilroberta-spam-comments-detection",  # Better for social media spam
+    tokenizer="valurank/distilroberta-spam-comments-detection",
+    truncation=True,
+    padding=True,
+    max_length=512,
+    device=0 if torch.cuda.is_available() else -1
+)
 
-df["spam_flag"] = df["cleaned_comment"].apply(detect_spam)
+# Process in smaller batches to avoid memory issues
+spam_results = []
+for i in range(0, len(df), 256):
+    batch_texts = df["cleaned_comment"].iloc[i:i+256].astype(str).tolist()
+    print(f"Processing batch {i//256 + 1}...")
+    batch_results = spam_detector(batch_texts, batch_size=32)
+    spam_results.extend(batch_results)
+
+df["spam_flag"] = [1 if r["label"] == "spam" else 0 for r in spam_results]
+df["spam_confidence"] = [r["score"] for r in spam_results]
+
+print(f"Spam detection complete. Found {df['spam_flag'].sum()} spam comments.")
+
 
 # ----------------------------
 # 6. RELEVANCE & CATEGORY
@@ -164,7 +181,7 @@ def quality_row(row):
     eng = engagement_score(row)
     return round(W_REL*rel + W_SNT*snt01 + W_LEN*sub + W_ENG*eng, 3)
 
-df["quality_score"] = df.apply(quality_row, axis=1)
+df["quality_score"] = df.apply(quality_row,axis=1)
 df["is_quality"] = df["quality_score"] >= 0.65
 
 # ----------------------------

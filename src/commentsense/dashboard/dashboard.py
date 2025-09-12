@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import matplotlib.pyplot as plt
 
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "..", "assets")
 df = pd.read_csv(os.path.join(ASSETS_DIR, "comments2_analyzed.csv"))
@@ -11,7 +12,7 @@ st.title("CommentSense – AI-Powered Comment Analysis")
 # KPIs
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Quality Ratio", f"{df['is_quality'].mean()*100:.1f}%")
-col2.metric("Spam Rate", f"{(df['spam_flag']=='spam').mean()*100:.1f}%")
+col2.metric("Spam Rate", f"{df['spam_flag'].mean()*100:.1f}%")
 col3.metric("Avg Quality Score", f"{df['quality_score'].mean():.2f}")
 col4.metric("# Comments", f"{len(df):,}")
 
@@ -45,3 +46,31 @@ st.dataframe(topq)
 st.subheader("Spam Comments (Sample)")
 spam_df = df[df["spam_flag"]=="spam"].head(50)
 st.dataframe(spam_df[["videoId","textOriginal","likeCount"]])
+
+# Category Pie Chart
+st.subheader("Postive Category Breakdown")
+
+df["sentiment"] = df["sentiment"].str.lower()
+positive_df = df[df["sentiment"] == "positive"]
+cat_counts = positive_df["category"].value_counts(normalize=True) * 100
+
+fig, ax = plt.subplots()
+
+# plot pie without autopct
+wedges, texts = ax.pie(
+    cat_counts,
+    startangle=90
+)
+
+# add legend with percentages
+labels = [f"{cat} - {val:.1f}%" for cat, val in zip(cat_counts.index, cat_counts.values)]
+ax.legend(
+    wedges,
+    labels,
+    title="Categories",
+    loc="center left",
+    bbox_to_anchor=(1, 0, 0.5, 1)  # outside chart
+)
+
+ax.set_title("Comment Breakdown by Category")
+st.pyplot(fig)
